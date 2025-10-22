@@ -160,30 +160,35 @@ EOF
 # ================================
 #   6. Configure Nginx Reverse Proxy (FINAL FIX)
 # ================================
-log "INFO: Configuring Nginx reverse proxy..."
-ssh -i "$SSH_KEY" "$SSH_USER@$SERVER_IP" /bin/sh <<EOF
-set -eu
-APP_PORT=$APP_PORT
+configure_nginx() {
+    log "Configuring Nginx reverse proxy..."
 
-# Create temporary Nginx config
-cat > /tmp/$REPO_NAME.nginx <<CONFIG
-server {
+    NGINX_CONF="server {
     listen 80;
-    server_name _;
+    server_name $SERVER_IP;
+
     location / {
         proxy_pass http://127.0.0.1:$APP_PORT;
-        proxy_set_header Host \\$host;
-        proxy_set_header X-Real-IP \\$remote_addr;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
     }
 }
-CONFIG
+"
 
-# Move config into place and enable
-sudo mv /tmp/$REPO_NAME.nginx /etc/nginx/sites-available/$REPO_NAME
-sudo ln -sf /etc/nginx/sites-available/$REPO_NAME /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo systemctl reload nginx
+    echo "$NGINX_CONF" > /tmp/nginx_app.conf
+    scp -i "$SSH_KEY" /tmp/nginx_app.conf "$SSH_USER@$SERVER_IP:/tmp/nginx_app.conf"
+
+    ssh -i "$SSH_KEY" "$SSH_USER@$SERVER_IP" /bin/sh <<EOF
+        set -eu
+        sudo mv /tmp/nginx_app.conf /etc/nginx/sites-available/$REPO_NAME
+        sudo ln -sf /etc/nginx/sites-available/$REPO_NAME /etc/nginx/sites-enabled/$REPO_NAME
+        sudo nginx -t
+        sudo systemctl reload nginx
 EOF
+
+    rm -f /tmp/nginx_app.conf
+    log "Nginx reverse proxy configured successfully."
+}
 
 # ================================
 #   7. Validate Deployment
